@@ -171,8 +171,8 @@ let sendOutput = (output, dept) => {
         if (roleCRN || role) {
             // Contains mentions
             message += " (";
-            if (role) message += role;
-            if (roleCRN) message += roleCRN;
+            if (role) message += "<@&" + role + ">";
+            if (roleCRN) message += "<@&" + roleCRN + ">";
             message += ")";
         }
         message += ": " + e[0];
