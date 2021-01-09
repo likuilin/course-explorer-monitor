@@ -5,7 +5,7 @@ const fs = require('fs');
 
 const client = new discord.Client();
 
-const secret = fs.readFileSync("token.txt");
+const secret = fs.readFileSync("token.txt").toString();
 const interval = 60 * 2;
 let guild = undefined;
 let validCourses = new Set();
