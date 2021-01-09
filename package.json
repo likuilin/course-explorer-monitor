@@ -1,0 +1,13 @@
+{
+  "name": "coursemon",
+  "version": "1.0.0",
+  "main": "coursemon.js",
+  "author": "kuilin",
+  "license": "Unlicensed",
+  "private": true,
+  "dependencies": {
+    "discord.js": "^12.4.1",
+    "request": "^2.88.2",
+    "xml2js": "^0.4.23"
+  }
+}
