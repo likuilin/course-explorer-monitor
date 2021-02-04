@@ -2,4 +2,4 @@ version: '3.2'
 services:
   bot:
     build: .
-    restart: always
+    restart: on-failure:3
