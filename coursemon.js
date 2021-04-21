@@ -278,6 +278,11 @@ client.on('message', message => {
     });
 });
 
+// status.kuilin.net
+setInterval(() => {
+    https.get("https://hc.kuilin.net/ping/dc626769-1ecd-4eae-ad9a-14eb09f0e604");
+}, 60*60*1000);
+
 client.login(secret);
 setInterval(check, interval * 1000);
 
