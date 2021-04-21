@@ -13,7 +13,7 @@ let validCRNs = new Set();
 let initDone = false;
 let prefix = '.';
 
-let url = e=>"https://courses.illinois.edu/cisapp/explorer/schedule/2021/spring/" + e.toUpperCase() + ".xml?mode=cascade"
+let url = e=>"https://courses.illinois.edu/cisapp/explorer/schedule/2021/fall/" + e.toUpperCase() + ".xml?mode=cascade"
 
 let toCheck = [];
 let previousData = {};
