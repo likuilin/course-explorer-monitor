@@ -16,4 +16,8 @@ To add a new department, add a new channel for it, and restart the bot. The list
 
 # License
 
-This bot is closed source. All code contributions belong to their respective authors. By contributing software to this repository, you grant all administrators of the UIUC Course Watcher Discord server, with Discord ID 513216523083710464, a worldwide, royalty-free, perpetual, exclusive, transferable, sublicensable and irrevocable license to use and otherwise exploit the software in any manner and for any purpose.
+GNU GPL 3.0
+
+# Contributing
+
+Issues and pull requests are appreciated. 
