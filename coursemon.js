@@ -5,28 +5,32 @@ const fs = require('fs');
 
 const client = new discord.Client();
 
-const secret = fs.readFileSync("token.txt").toString();
-const interval = 60 * 2;
+const {secret, baseUri, checkInterval, guildID, adminChannelID, statusPing, debug} = require("./config.js");
+
 let guild = undefined;
 let validCourses = new Set();
 let validCRNs = new Set();
 let initDone = false;
 let prefix = '.';
 
-let url = e=>"https://courses.illinois.edu/cisapp/explorer/schedule/2021/fall/" + e.toUpperCase() + ".xml?mode=cascade"
+let url = dept => baseUri + dept.toUpperCase() + ".xml?mode=cascade"
 
+// cache list of departments to check (require restart to update)
 let toCheck = [];
-let previousData = {};
+// map of department => previous data, direct from xml2js
+let previousResults = {};
 
-let debug = false;
+// whether debug was triggered, use debug command to reset
+let debugDone = false;
 
 client.on('ready', () => {
     console.log('Connected.');
-    client.guilds.fetch("513216523083710464").then(()=>{
-        guild = client.guilds.cache.get("513216523083710464");
+    client.guilds.fetch(guildID).then(()=>{
+        guild = client.guilds.cache.get(guildID);
         toCheck = guild.channels.cache.find(e=>e.name=='Notifications').children
                     .array().map(e=>e.name);
-        client.channels.cache.get("514616341634875422").send("Restarted.");
+        console.log(toCheck);
+        client.channels.cache.get(adminChannelID).send("Restarted.");
         check();
     });
 });
@@ -40,16 +44,21 @@ let check = () => {
             let data = '';
             response.on('data', e=>data+=e);
             response.on('end', ()=>{
+                // There is a bug where, every day at 2:00am or so, course explorer will
+                // be missing all of its data. Experimentally, this is the only time UNKNOWN
+                // shows up, so unfortunately we quietishly fail if we see that. 
                 if (data.includes("<enrollmentStatus>UNKNOWN</enrollmentStatus>"))
                     return console.log(dept + " returned UNKNOWN, skipping");
                 xml2js.parseString(data, (err, result)=>{
                     if (!result || !result.hasOwnProperty('ns2:subject'))
                         return console.log("Download failed for " + dept, data, result);
-                    if (!previousData.hasOwnProperty(dept)) {
-                        previousData[dept] = result;
+                    // If anything in here throws, then the CISAPI probably changed
+                    if (!previousResults.hasOwnProperty(dept)) {
+                        // Initialization, first pull
+                        previousResults[dept] = result;
                         console.log("Initialized " + dept);
                         
-                        //add to validCourses and validCRNs
+                        // Add to validCourses and validCRNs
                         result['ns2:subject'].cascadingCourses[0].cascadingCourse.forEach(p=>{
                             let course = p.$.id.split(' ').join('');
                             validCourses.add(course)
@@ -59,10 +68,10 @@ let check = () => {
                         return;
                     }
                     console.log("Updated     " + dept + " " + data.length);
-                    if (!initDone) client.channels.cache.get("514616341634875422").send("Finished initialization.");
+                    if (!initDone) client.channels.cache.get(adminChannelID).send("Finished initialization.");
                     initDone = true;
-                    diff(previousData[dept], result, dept);
-                    previousData[dept] = result;
+                    diff(previousResults[dept], result, dept);
+                    previousResults[dept] = result;
                 });
             });
         });
@@ -70,7 +79,10 @@ let check = () => {
 }
 
 let fmt = e=>{
-    if (typeof e != "string") debugger;
+    if (typeof e != "string") {
+        console.error("Error: fmt was passed a non-string, did the CISAPI api spec change?");
+        process.exit(0);
+    }
     return "`" + e.split("`").join("'") + "`";
 }
 
@@ -138,18 +150,21 @@ let diff = (past, curr, dept) => {
             Object.keys(cS).filter(e=>!excludeProperties.includes(e)).forEach(property=>{
                 let pText = clean(pS[property]);
                 let cText = clean(cS[property]);
-                if (debug) {
-                    if (pS.$.id == "38572") {
+                if (debug && !debugDone) {
+                    if (pS.$.id == debug) {
                         cText = "test";
-                        debug = false;
+                        debugDone = true;
                     }
                 }
-                if (pText != cText && pText != "(blank)" && cText != "(blank)") 
+                if (pText != cText && pText != "(blank)" && cText != "(blank)") {
                     //get meeting times for user friendliness
+                    // fixme: sometimes, instead of .meeting, there's .meetings which is an array of meetings?
+                    // figure out what that means and how to nicely display that, fmt currently jsons it which is :(
                     output.push(["Section with CRN " + fmt(pS.$.id) + 
                         " ("+fmt(cS.meetings[0].meeting.map(e=>clean(e.daysOfTheWeek).split(' ').join('') + " " + clean(e.start)+" - "+clean(e.end)).join("; "))+")" + 
                         " property " + fmt(property) + 
                         " changed from " + fmt(pText) + " to " + fmt(cText), courseCode, pS.$.id]);
+                }
             });
         });
     });
@@ -177,7 +192,7 @@ let sendOutput = (output, dept) => {
         }
         message += ": " + e[0];
         
-        // woo discord updated
+        // woo discord updated to allow us to mention unmentionable roles without toggling the role
         channel.send(message, {allowedMentions: {parse: ['roles']}});
         /*
         //if there is a role, we have to enable it, mention it, and then disable it
@@ -197,16 +212,21 @@ let sendOutput = (output, dept) => {
 }
 
 client.on('message', message => {
+    // only allow commands in channels #roles or #roles-testing
     if (!message.channel.name.startsWith("roles")) return;
     if (!message.content.startsWith(prefix)) return;
     
     let set; //true = add role, false = remove role
+    
+    // watch and unwatch fall through this if statement, everything else returns.
+    // when implementing commands, take care that course codes may or may not be entered with a space
     if (message.content.startsWith(prefix + 'watch ')) set = true;
     else if (message.content.startsWith(prefix + 'unwatch')) set = false;
-    else if (message.content.startsWith(prefix + 'restart')) process.exit(0);
+    else if (message.content.startsWith(prefix + 'restart')) process.exit(0); // fixme: perms check
     else if (message.content.startsWith(prefix + 'forceupdate')) return check();
     else if (message.content.startsWith(prefix + 'debug')) {
-        debug = true;
+        message.channel.send("Set.");
+        debugDone = false;
         return;
     }
     else if (message.content.startsWith(prefix + 'list ')) {
@@ -225,7 +245,13 @@ client.on('message', message => {
         return;
     }
     else if (message.content.startsWith(prefix + prefix)) return;
-    else return message.channel.send("Usage:\n`" + prefix + "watch ECE 391` - be notified of changes to ECE 391\n`" + prefix + "unwatch CS 225` - stop being notified of changes to CS 225");
+    else return message.channel.send(`Usage:
+\`` + prefix + `watch ECE 391\` - subscribe to changes to ECE 391
+\`` + prefix + `watch ECE 391/47765\` - subscribe to changes to only section 47765 of ECE 391
+\`` + prefix + `unwatch CS 225\` - unsubscribe from CS 225
+\`` + prefix + `unwatch all\` - remove all subscriptions
+\`` + prefix + `list BADM\` - list all seen courses in a department
+\`` + prefix + `listall PHYS 325\` - list all seen sections of a course`);
     
     guild.members.fetch().then(()=>{
         //parse class name from message
@@ -235,6 +261,7 @@ client.on('message', message => {
             if (set) return message.channel.send("Haha no.");
             let roles = message.member.roles.cache.filter(e=>(validCourses.has(e.name) || validCRNs.has(e.name)));
             roles.forEach(role=>{
+                // fixme: this is a copy paste of logic below for removal in the non-all case, should be refactored
                 message.member.roles.remove(role).then(()=>{
                     //check if we should delete the role
                     if(!guild.members.cache.some(e=>e.roles.cache.get(role.id))) role.delete().then(()=>{
@@ -279,15 +306,12 @@ client.on('message', message => {
 });
 
 // status.kuilin.net
-setInterval(() => {
-    https.get("https://hc.kuilin.net/ping/dc626769-1ecd-4eae-ad9a-14eb09f0e604");
-}, 60*60*1000);
+if (statusPing) {
+    https.get(statusPing);
+    setInterval(() => {
+        https.get(statusPing);
+    }, 60*60*1000);
+}
 
 client.login(secret);
-setInterval(check, interval * 1000);
-
-/*
-setInterval(function () {
-    console.log("Beep");
-}, 1000);
-*/
+setInterval(check, checkInterval);

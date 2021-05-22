@@ -116,4 +116,4 @@ dist
 .pnp.*
 
 # token
-token.txt
+config.js
