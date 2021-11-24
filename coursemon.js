@@ -93,7 +93,7 @@ let clean = e=>{
     return JSON.stringify(e);
 }
 
-let excludeProperties = ["$", "parents", "detailedSections"];
+let excludeProperties = ["$", "parents", "detailedSections", "creditHours"];
 
 let diff = (past, curr, dept) => {
     let output = []; //output format: [message, course code] for @tags
